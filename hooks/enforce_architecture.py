@@ -7,61 +7,64 @@ mode can be "deny", "ask" or "off". Only polices code-file creation; ignores
 docs/config and files that already exist (those are edits, not placements).
 Fails open when not configured.
 """
-import fnmatch
-import json
 import os
 import sys
 
-CONFIG_REL = os.path.join(".claude-for-idiots", "config.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cfi_common as cfi
 
-CODE_EXT = {
-    ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs", ".java", ".kt",
-    ".rb", ".php", ".dart", ".vue", ".svelte", ".cs", ".swift", ".scala",
-}
-
-
-def load_config(cwd):
-    try:
-        with open(os.path.join(cwd, CONFIG_REL)) as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
+# "is this a code file?" (IGNORED_EXT, the dotenv exemption, the
+# no-extension exemption, and the ignored_extensions override) lives in
+# _cfi_common.is_policed now -- require_feature_alignment.py (Rule 10) asks
+# the exact same question and must agree with Rule 5 on the answer, so
+# there is exactly one implementation instead of two that could drift.
 
 
 def main():
-    try:
-        event = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        sys.exit(0)
+    event = cfi.read_event()
+    if not event:
+        cfi.allow()
 
-    tool_input = event.get("tool_input") or {}
-    file_path = tool_input.get("file_path") or ""
-    if not file_path:
-        sys.exit(0)
-
+    file_path = cfi.target_path(event.get("tool_input"))
     cwd = event.get("cwd") or os.getcwd()
-    config = load_config(cwd)
+    config = cfi.load_config(cwd)
     if not config:
-        sys.exit(0)
+        cfi.allow()
 
-    arch = config.get("architecture") or {}
-    mode = arch.get("enforce", "off")
-    allowed = arch.get("allowed_paths") or []
-    if mode == "off" or not allowed:
-        sys.exit(0)
+    arch = cfi.section(config, "architecture")
+    # "off" as the default meant a config written without this key silently
+    # disabled the rule the skill advertises. "ask" is the safe default: it
+    # surfaces the decision instead of swallowing it. Any OTHER value --
+    # explicit "off", a typo, or a config field of the wrong type entirely --
+    # still fails open here, so a malformed or intentionally-disabled config
+    # can never crash the hook or escalate into an accidental deny.
+    mode = arch.get("enforce", "ask")
+    if mode not in ("deny", "ask"):
+        cfi.allow()
+    allowed = cfi.str_list(arch.get("allowed_paths"))
+    if not allowed:
+        cfi.allow()
+
+    rel = cfi.relativize(file_path, cwd)
+    if not rel:
+        cfi.allow()
 
     # Only police new code files. Let docs/config and edits-to-existing through.
-    _, ext = os.path.splitext(file_path)
-    if ext.lower() not in CODE_EXT:
-        sys.exit(0)
-    if os.path.exists(file_path):
-        sys.exit(0)
+    if not cfi.is_policed(rel, arch.get("ignored_extensions")):
+        cfi.allow()
 
-    rel = os.path.relpath(file_path, cwd) if os.path.isabs(file_path) else file_path
-    rel = rel.replace(os.sep, "/")
+    # An existing file is an edit, not a placement. Resolve against the
+    # EVENT's cwd, never the process cwd — the hook may be invoked anywhere.
+    if os.path.exists(os.path.join(cwd, rel)):
+        cfi.allow()
 
-    if any(fnmatch.fnmatch(rel, p) for p in allowed):
-        sys.exit(0)
+    # on_incomplete=True: this hook ALLOWS on a match, so an allowed_paths
+    # list too expensive to fully evaluate (see matches_any's docstring)
+    # must fail open the same direction as everything else here -- allow,
+    # not deny/ask. Without this, an absurd config would turn "the safety
+    # net degrades" into "legitimate writes start getting denied".
+    if cfi.matches_any(rel, allowed, on_incomplete=True):
+        cfi.allow()
 
     layers = arch.get("layers") or {}
     layer_hint = "\n".join(f"    {k}: {v}" for k, v in layers.items()) or "    (see CLAUDE.md)"
@@ -73,15 +76,15 @@ def main():
         "Place the file in the correct layer, or update `architecture` in "
         ".claude-for-idiots/config.json + CLAUDE.md if this is a deliberate change."
     )
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny" if mode == "deny" else "ask",
-            "permissionDecisionReason": reason,
-        }
-    }))
-    sys.exit(0)
+    cfi.decide("deny" if mode == "deny" else "ask", reason)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Last-resort net -- see block_migration_edits.py for the rationale
+        # (this codebase has already found three distinct fail-open gaps of
+        # this same shape across the three hooks). Never catches the
+        # SystemExit that cfi.allow()/cfi.decide() raise.
+        sys.exit(0)

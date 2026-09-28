@@ -11,6 +11,11 @@ long for `CLAUDE.md` (which is loaded every session and must stay short).
 
 *(none yet)*
 
+## Features
+<!-- - [Google login](features/2026-09-25-login-google.md) — decisions made before building it (Rule 10) -->
+
+*(none yet)*
+
 ## Investigations
 <!-- - [Login timeout bug](investigations/2026-06-login-timeout.md) — root cause: connection pool exhaustion -->
 

@@ -17,12 +17,20 @@ code — it catches sloppy or broken-looking code before it bites you."*
 
 ## Setup duties
 
-1. Install the tools as **dev dependencies** (e.g. `pip install ruff mypy`,
-   `npm i -D eslint prettier`).
-2. Create the minimal config the tool expects (e.g. `[tool.ruff]` in
-   `pyproject.toml`, `eslint.config.js`).
-3. Fill `tests.lint_cmd` and `tests.format_cmd` in
-   `.claude-for-idiots/config.json`.
+1. Install the tools as dev dependencies **inside an isolated environment**:
+   - Python: `python3 -m venv .venv && .venv/bin/pip install ruff mypy`
+     (a bare `pip install` fails with `externally-managed-environment` on
+     Debian/Ubuntu/Arch — PEP 668)
+   - JS/TS: `npm i -D eslint prettier typescript`
+2. Create the tool's minimal config **and the npm scripts that run it** —
+   `create-next-app`, `nest new` and `create-vite` do NOT generate a
+   `typecheck` script, so `npm run typecheck` fails with
+   `Missing script: "typecheck"`. Add to `package.json`:
+   ```json
+   "scripts": { "typecheck": "tsc --noEmit", "format": "prettier --write ." }
+   ```
+3. Only then fill `tests.lint_cmd` / `tests.format_cmd` — with commands you
+   have actually run once in this project.
 4. **No onboarding question** — quality tooling is on by default: it's cheap,
    silent, and prevents style debates. Advanced users change tools by editing
    this catalog / the config.

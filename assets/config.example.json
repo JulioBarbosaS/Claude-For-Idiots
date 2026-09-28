@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "skill_version": "0.3.0",
+  "skill_version": "0.5.0",
   "language": "en",
   "experience_level": "beginner",
   "term_mode": "explain",
@@ -21,10 +21,23 @@
     },
     "enforce": "ask"
   },
+  "brainstorm": {
+    "enforce": "ask",
+    "record": ".claude-for-idiots/current-feature.json"
+  },
   "migrations": {
     "tool": "prisma",
-    "command": "prisma migrate dev --name <describe_change>",
-    "protected_paths": ["prisma/migrations/**", "alembic/versions/**", "**/migrations/**"]
+    "command": "npx prisma migrate dev --name describe_change",
+    "protected_paths": [
+      "prisma/migrations/**",
+      "alembic/versions/**",
+      "**/migrations/[0-9]*",
+      "**/migrations/*.sql"
+    ]
+  },
+  "secrets": {
+    "allowlist_paths": ["tests/fixtures/**"],
+    "allow_patterns": ["AKIAIOSFODNN7EXAMPLE"]
   },
   "tests": {
     "enabled": true,

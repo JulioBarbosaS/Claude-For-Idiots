@@ -155,7 +155,8 @@ flowchart LR
 ## 🛡️ O que ela garante
 
 Depois do setup, o Claude segue isto em **toda** sessão daquele projeto.
-**🔒 Garantido** = imposto por um hook; o Claude literalmente não consegue quebrar.
+**🔒 Checado por hook** = um script bloqueia os caminhos mais comuns de violação —
+uma rede de segurança, não uma jaula. Veja "Limitações conhecidas" pro que ainda passa.
 
 | | Regra | O que significa pra você |
 |---|---|---|
@@ -169,6 +170,7 @@ Depois do setup, o Claude segue isto em **toda** sessão daquele projeto.
 | | **Reutiliza antes de reconstruir** | Procura no código e na `docs/` antes de escrever a mesma coisa duas vezes. |
 | | **Mantém um cérebro em `docs/`** | Decisões grandes e lições difíceis sobrevivem — sem inflar cada sessão. |
 | | **Sabe a hora de parar de chutar** | Depois de duas correções falhas: relê o erro, confere versões, pesquisa na web e *aí* tenta de novo. |
+| 🔒 | **Pausa numa feature nova** | Põe as decisões escondidas como opções pra escolher antes de escrever código. Conserto de bug, ajuste visual ou renomeação passa direto. |
 | | **Consegue checar o navegador sozinho** | Em apps web: abre a página, lê o console atrás de erros escondidos, tira screenshots. *(Playwright — ele se oferece pra configurar.)* |
 
 E ela se adapta a **você**:
@@ -229,11 +231,35 @@ Ser transparente é melhor do que te pegar de surpresa:
   gerado chama `python3`; uma instalação do python.org entrega só `python.exe` /
   `py.exe`. Se o hook não conseguir iniciar, os guard-rails silenciosamente não
   rodam — teste com uma violação de propósito depois do setup.
-- **Os hooks vigiam ferramentas de arquivo, não o shell.** Escrever um arquivo via
-  `sed -i` ou `cat > arquivo` no Bash não é interceptado pelos hooks de arquitetura
-  e migração.
-- **O scanner de segredos é baseado em regex.** Ele pode dar falso positivo em
-  fixtures de teste realistas, e varre a árvore de trabalho — não o *histórico* do Git.
+- **Os hooks vigiam ferramentas de arquivo, não o shell.** Um arquivo escrito via
+  `Edit`/`Write` é checado contra a arquitetura; o mesmo arquivo criado com
+  `cat > arquivo` ou `sed -i` não é. Só comandos `Bash` com cara de *publicação*
+  (`git push`, `npm publish`, `docker push`, …) são inspecionados.
+- **O scanner de segredos é baseado em regex.** Ele lê arquivos rastreados, `.env`
+  gitignorados no disco e os commits prestes a subir — mas não consegue limpar algo
+  que já foi empurrado num commit anterior, e pode dar falso positivo em fixture de
+  teste realista. Isente pelo `secrets.allowlist_paths` ou com um comentário
+  `# cfi:allow-secret` — nunca para credencial de verdade.
+- **A arquitetura é checada por extensão e glob de caminho.** Arquivo sem extensão
+  nenhuma (`Dockerfile`, `Makefile`) nunca é policiado, de propósito.
+- **Flutter:** arquivos de config de plataforma (`AndroidManifest.xml`, `Info.plist`,
+  …) são liberados, mas código nativo de plugin em `android/`/`ios/`/`macos/` (um
+  `.kt` ou `.swift` novo, `project.pbxproj`) continua sendo checado — de propósito,
+  pra uma camada nativa não contornar a arquitetura Dart em silêncio.
+- **A pausa de feature (Regra 10) nunca vê o seu prompt, só o arquivo sendo
+  escrito.** Distinguir "feature nova" de "conserto de bug" é julgamento do Claude,
+  não de um script. O hook pega um caso estreito: arquivo de código novo sem nenhum
+  alinhamento registrado. Uma feature construída inteira dentro de arquivos que já
+  existem passa sem pausa, por maior que seja.
+- **"Isso é arquivo de teste?" é decidido por convenção de nome e pasta** (`tests/`,
+  `foo_test.py`, `foo.spec.ts`, …), não pelo que o arquivo faz — deliberado, pra
+  Regra 10 nunca brigar com teste-primeiro. Um arquivo que só *parece* teste é
+  isento do mesmo jeito.
+- **`secrets.allow_patterns` só roda em Linux/macOS.** Uma regex vinda do config
+  pode entrar em backtracking catastrófico e no Windows não há como interromper
+  uma que já começou, então o campo simplesmente não vale lá em vez de arriscar
+  travar o hook — a mensagem de bloqueio avisa. `secrets.allowlist_paths` e o
+  pragma `# cfi:allow-secret` funcionam em qualquer plataforma.
 - **Bases de código já existentes e fluxos de deploy ainda não são cobertos.**
 
 Esbarrou em alguma? [Abra uma issue](https://github.com/JulioBarbosaS/Claude-For-Idiots/issues) —
@@ -252,7 +278,8 @@ Esbarrou em alguma? [Abra uma issue](https://github.com/JulioBarbosaS/Claude-For
 SKILL.md                      # o cérebro da skill (onboarding + comportamento)
 VERSION                       # versão atual, registrada em cada projeto
 references/                   # dados editáveis — estenda a skill AQUI
-  rules.md                    #   as 9 regras (fonte da verdade)
+  rules.md                    #   as 10 regras (fonte da verdade)
+  brainstorming.md            #   Regra 10: quando alinhar, como perguntar
   stack-catalog.md            #   objetivo → stack
   architecture-catalog.md     #   stack → arquitetura idiomática
   onboarding-flow.md          #   as perguntas
@@ -270,7 +297,8 @@ hooks/                        # os guard-rails técnicos (Python, só stdlib)
   block_migration_edits.py    #   Regra 1
   enforce_architecture.py     #   Regra 5
   scan_secrets_before_push.py #   Regra 6
-tests/test_hooks.py           # 16 testes dos hooks — bloqueia / permite / falha-aberto
+  require_feature_alignment.py#   Regra 10
+tests/                        # 193 testes — bloqueia / permite / falha-aberto / consistência
 .github/workflows/ci.yml      # roda tudo a cada push e PR
 ```
 

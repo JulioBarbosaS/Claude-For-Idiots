@@ -23,8 +23,12 @@
   `.claude-for-idiots/config.json`.
 
 ## Knowledge & reuse
-- **Before building a feature:** search the codebase for something to reuse and
-  skim `docs/INDEX.md` (Rule 7). Extend instead of duplicating.
+- **The search comes first, then the options (Rule 10):** before drafting the
+  choices for a new feature, search the codebase for something reusable, skim
+  `docs/INDEX.md`, and check `architecture.allowed_paths` in
+  `.claude-for-idiots/config.json` for where it would have to live. What that
+  search turns up is what feeds the options — not something checked after the
+  design is already decided (Rule 7). Extend instead of duplicating.
 - **Long-form knowledge lives in `docs/`** — decisions (ADRs), costly bug
   investigations, external API quirks. Read it when the task touches those
   areas; write a new doc + index line when you decide or discover something
@@ -71,6 +75,17 @@ architecture, update this section AND `.claude-for-idiots/config.json` first.
    installed versions vs docs, search the web deeply for the exact error, and
    only then retry with a genuinely new hypothesis. Costly investigations get a
    doc in `docs/investigations/`.
+10. **Align before building a feature.** New behavior pauses first: the hidden
+    decisions come as **options to pick from** (never an open question), each
+    with its consequence in one line, before any code. Bug fixes, visual
+    tweaks, and renames go straight through.
+    ```
+    fires:      "quero login com Google" · "adiciona carrinho" · "exportar em PDF"
+    does not:   "arruma esse erro do console" · "muda a cor do botão" · "renomeia calcTotal"
+    ```
+    Write the agreed decisions to `.claude-for-idiots/current-feature.json`
+    before touching code — the hook reads that file. If I say to go straight
+    ahead, record that and do it; don't ask twice.
 
 ## Commands
 - Relevant tests (per feature): `{{FEATURE_TEST_CMD}}`
@@ -85,5 +100,5 @@ When one turns out to be wrong or changes, **fix it here immediately** — you a
 allowed and expected to edit this file. Only the **rules** above require the
 user's consent to change.
 
-> Config: `.claude-for-idiots/config.json`. Rules 1, 5, 6 are also enforced by
-> hooks in `.claude/hooks/` — they will block violations, not just warn.
+> Config: `.claude-for-idiots/config.json`. Rules 1, 5, 6, 10 are also enforced
+> by hooks in `.claude/hooks/` — they will block violations, not just warn.

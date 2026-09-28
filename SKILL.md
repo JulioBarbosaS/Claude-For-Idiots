@@ -27,7 +27,7 @@ The skill is the *installer*. The real enforcement lives in the files it writes:
 | Rules + profile | `CLAUDE.md` | Loaded automatically every session. Source of truth for behavior. |
 | Config | `.claude-for-idiots/config.json` | Machine-readable answers from onboarding. Read by the hooks. |
 | Glossary | `.claude-for-idiots/glossary.json` | Tracks which terms were explained and the user's growing level. |
-| Hooks | `.claude/hooks/*.py` | Technically enforce Rules 1, 5 and 6 (block, not just promise). |
+| Hooks | `.claude/hooks/*.py` | Check Rules 1, 5 and 6 on the common paths and block violations (safety net, not a sandbox). |
 | Hook wiring | `.claude/settings.json` | Registers the hooks as `PreToolUse`. |
 | Knowledge base | `docs/INDEX.md` | Long-term memory on demand: ADRs, bug investigations, API quirks. |
 
@@ -119,11 +119,14 @@ After stack/architecture are settled:
    `<project>/CLAUDE.md` (merge, don't clobber, if one already exists).
 2. Write `<project>/.claude-for-idiots/config.json` using
    `assets/config.example.json` as the shape. Fill `migrations`,
-   `architecture.allowed_paths`, `tests`, etc. — the hooks read these. Record
+   `architecture.allowed_paths`, `architecture.enforce` (`deny` | `ask`),
+   `brainstorm.enforce` (`off` | `ask` | `deny`; **default `ask`** for a new
+   project — Rule 10), `tests`, etc. — the hooks read these. Record
    `skill_version` from this skill's `VERSION` file (updates use it to know
    where the project is starting from).
-3. Create `<project>/.claude/hooks/` and copy the three scripts from this
-   skill's `hooks/` directory into it.
+3. Create `<project>/.claude/hooks/` and copy the five files from this
+   skill's `hooks/` directory (the four hooks plus `_cfi_common.py`, which
+   they import) into it.
 4. Merge `assets/settings.template.json` into `<project>/.claude/settings.json`
    (preserve any existing hooks/keys).
 5. Initialize `<project>/.claude-for-idiots/glossary.json` (see
@@ -160,10 +163,27 @@ onboarding and follow `references/update-flow.md`:
    otherwise) and report old → new version from the `VERSION` file.
 2. **Update the current project**, if it has a `.claude-for-idiots/config.json`:
    summarize what's new (from `CHANGELOG.md`, in the user's language), refresh
-   the hooks, merge new rules into `CLAUDE.md`, add new config fields —
-   **preserving every onboarding choice and verified project fact** — then set
-   `skill_version` to the current version.
-3. Remind the user to restart the session so updated hooks/skill take effect.
+   the hooks — copy the current `.claude/hooks/*.py` (including
+   `require_feature_alignment.py` on an upgrade from pre-0.5.0) into the
+   project and merge `assets/settings.template.json` into
+   `<project>/.claude/settings.json` — merge new rules into `CLAUDE.md`, add
+   new config fields — **preserving every onboarding choice and verified
+   project fact** — then set `skill_version` to the current version.
+3. **A project with no `brainstorm` section in its config (pre-0.5.0) stays
+   `off`** — the hook reads a missing section that way on purpose, for
+   compatibility. Never turn it on as part of the update. Instead, ask, as
+   options to pick from (one sentence on what changes: new-feature requests
+   would start pausing for a quick choice before code gets written):
+   - **`ask` (recommended)** — the hook will require your OK before a
+     feature-shaped change lands with no recorded alignment; you can still
+     say "just go" per request to skip it.
+   - **`deny`** — stricter: it blocks outright until the decisions are
+     recorded.
+   - **`off`** — leave it exactly as it is today, no prompts.
+   Write whichever the user picks (including an explicit `off`) to
+   `brainstorm.enforce` in the config; if the user doesn't answer, leave the
+   section absent rather than guessing.
+4. Remind the user to restart the session so updated hooks/skill take effect.
 
 ---
 
@@ -191,6 +211,11 @@ onboarding and follow `references/update-flow.md`:
 9. **Two failed fixes → stop guessing, research.** Re-read the full error, check
    versions, search the web deeply, then retry with a genuinely new hypothesis.
    Costly investigations become docs (Rule 8).
+10. **Align before building a feature.** A request that adds behavior the
+    project doesn't have yet pauses first: offer the hidden decisions as
+    options to pick from, never an open question, before writing any code.
+    Bug fixes, visual tweaks, and renames go straight through. *(Hook-enforced.)*
+    Full script: `references/brainstorming.md`.
 
 ---
 

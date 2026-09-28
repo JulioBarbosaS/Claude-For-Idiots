@@ -1,0 +1,19 @@
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+# tests/fixtures/ is test DATA, not source: real scaffold trees per stack
+# (including an intentionally content-free .ipynb placeholder -- see
+# tests/test_real_projects.py) that ruff must never try to parse as code.
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM"]
+
+# Grandfathered pre-existing style nits in files outside this task's scope
+# (hooks/ and the other test suites belong to other tasks in this plan) --
+# not silenced project-wide, so newly written code is still held to the
+# full ruleset. Remove an entry once its file is cleaned up.
+[tool.ruff.lint.per-file-ignores]
+"hooks/scan_secrets_before_push.py" = ["UP015"]
+"tests/test_common.py" = ["E401"]
+"tests/test_hooks.py" = ["E501"]

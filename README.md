@@ -152,7 +152,8 @@ flowchart LR
 ## 🛡️ What it enforces
 
 After setup, Claude follows these in **every** session of that project.
-**🔒 Enforced** = guaranteed by a hook; Claude literally can't break it.
+**🔒 Checked by a hook** = a script blocks the common violation paths — a safety
+net, not a sandbox. See "Known limitations" for what still gets through.
 
 | | Rule | What it means for you |
 |---|---|---|
@@ -166,6 +167,7 @@ After setup, Claude follows these in **every** session of that project.
 | | **Reuses before rebuilding** | Searches the codebase and `docs/` before writing the same thing twice. |
 | | **Keeps a `docs/` brain** | Big decisions and hard-won lessons survive — without bloating every session. |
 | | **Knows when to stop guessing** | After two failed fixes: re-read the error, check versions, research the web, *then* retry. |
+| 🔒 | **Pauses on a new feature** | Lays out the hidden decisions as options to pick from before writing code. A bug fix, a visual tweak or a rename goes straight through. |
 | | **Can check the browser itself** | For web apps: loads the page, reads the console for hidden errors, screenshots. *(Playwright — it offers to set it up.)* |
 
 And it adapts to **you**:
@@ -225,10 +227,35 @@ Being upfront beats being surprised:
   calls `python3`; a python.org install only ships `python.exe` / `py.exe`. If the
   hook can't start, the guard-rails silently don't run — check with a deliberate
   violation after setup.
-- **The hooks watch file tools, not the shell.** Writing a file via `sed -i` or
-  `cat > file` in Bash isn't intercepted by the architecture/migration hooks.
-- **The secret scanner is regex-based.** It can false-positive on realistic-looking
-  test fixtures, and it scans the working tree — not your git *history*.
+- **The hooks watch file tools, not the shell.** A file written via `Edit`/`Write`
+  is checked against the architecture; the same file created with `cat > file` or
+  `sed -i` is not. Only `Bash` commands that look like a *publish* step (`git push`,
+  `npm publish`, `docker push`, …) get inspected.
+- **The secret scanner is regex-based.** It reads tracked files, gitignored `.env`
+  files on disk, and the commits about to be pushed — but it can't scrub something
+  already pushed in an earlier commit, and it can false-positive on realistic test
+  fixtures. Exempt those with `secrets.allowlist_paths` or a `# cfi:allow-secret`
+  comment — never for a live credential.
+- **Architecture enforcement goes by file extension and path glob.** A file with no
+  extension at all (`Dockerfile`, `Makefile`) is never policed, by design.
+- **Flutter:** platform config files (`AndroidManifest.xml`, `Info.plist`, …) are
+  allowed, but native plugin code under `android/`/`ios/`/`macos/` (a new `.kt` or
+  `.swift`, `project.pbxproj`) is still checked — on purpose, so a native layer
+  can't quietly bypass the Dart architecture.
+- **The feature pause (Rule 10) never sees your prompt, only the file being
+  written.** Telling "new feature" from "bug fix" is Claude's judgment, not a
+  script's. The hook catches one narrow case: a brand-new code file with no
+  alignment recorded. A feature built entirely inside files that already exist
+  passes with no pause, however large.
+- **"Is this a test file?" is decided by filename and folder convention** (`tests/`,
+  `foo_test.py`, `foo.spec.ts`, …), not by what the file does — deliberate, so
+  Rule 10 never fights test-first development. A file that merely *looks* like a
+  test is exempt the same way.
+- **`secrets.allow_patterns` is Linux/macOS only.** A regex from the config can
+  backtrack catastrophically and there is no way to interrupt one mid-run on
+  Windows, so the field degrades to nothing there rather than risk stalling the
+  hook; the block message says so. `secrets.allowlist_paths` and the
+  `# cfi:allow-secret` pragma work everywhere.
 - **Existing codebases and deploy workflows aren't covered yet.**
 
 Hit one of these? [Open an issue](https://github.com/JulioBarbosaS/Claude-For-Idiots/issues) —
@@ -247,7 +274,8 @@ that's exactly how the catalogs get better.
 SKILL.md                      # the skill's brain (onboarding + behavior)
 VERSION                       # current version, recorded into each project
 references/                   # editable data — extend the skill HERE
-  rules.md                    #   the 9 rules (source of truth)
+  rules.md                    #   the 10 rules (source of truth)
+  brainstorming.md            #   Rule 10: when to align, how to ask
   stack-catalog.md            #   objective → stack
   architecture-catalog.md     #   stack → idiomatic architecture
   onboarding-flow.md          #   the questions
@@ -265,7 +293,8 @@ hooks/                        # the technical guard-rails (Python, stdlib only)
   block_migration_edits.py    #   Rule 1
   enforce_architecture.py     #   Rule 5
   scan_secrets_before_push.py #   Rule 6
-tests/test_hooks.py           # 16 hook tests — block / allow / fail-open
+  require_feature_alignment.py#   Rule 10
+tests/                        # 193 tests — block / allow / fail-open / consistency
 .github/workflows/ci.yml      # runs them on every push and PR
 ```
 

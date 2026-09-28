@@ -5,15 +5,40 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  hooks:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.9", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile hooks
+        run: python -m compileall -q hooks
+      - name: Hook contract tests
+        run: python tests/test_hooks.py
+      - name: Shared module tests
+        run: python tests/test_common.py
+      - name: Real-project fixtures
+        run: python tests/test_real_projects.py
+      - name: Repo consistency
+        run: python tests/test_repo_consistency.py
+
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
-      - name: Compile hooks
-        run: python3 -m py_compile hooks/*.py
-      - name: Run hook test suite
-        run: python3 tests/test_hooks.py
+          python-version: "3.13"
+      - run: pipx install ruff
+      - name: Lint the skill's own code
+        run: ruff check hooks tests

@@ -1,76 +1,63 @@
 #!/usr/bin/env python3
 """Rule 1 — never hand-edit migration files.
 
-PreToolUse hook (matcher: Edit|Write|MultiEdit). Reads the per-project
-.claude-for-idiots/config.json to learn which paths are protected and which
-migration command to use instead. Fails open (allows) when there is no config
-or no migrations section, so it never interferes with unrelated projects.
+PreToolUse hook (matcher: Edit|Write|MultiEdit|NotebookEdit). Reads the
+per-project .claude-for-idiots/config.json for the protected paths and the
+generator command. Fails open when there is no config or no migrations
+section, so it never interferes with unrelated projects.
 """
-import fnmatch
-import json
 import os
 import sys
 
-CONFIG_REL = os.path.join(".claude-for-idiots", "config.json")
-
-
-def load_config(cwd):
-    try:
-        with open(os.path.join(cwd, CONFIG_REL)) as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-
-
-def deny(reason):
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }))
-    sys.exit(0)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cfi_common as cfi
 
 
 def main():
-    try:
-        event = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        sys.exit(0)  # fail open
+    event = cfi.read_event()
+    if not event:
+        cfi.allow()
 
-    tool_input = event.get("tool_input") or {}
-    file_path = tool_input.get("file_path") or ""
-    if not file_path:
-        sys.exit(0)
-
+    file_path = cfi.target_path(event.get("tool_input"))
     cwd = event.get("cwd") or os.getcwd()
-    config = load_config(cwd)
+    config = cfi.load_config(cwd)
     if not config:
-        sys.exit(0)
+        cfi.allow()
 
-    migrations = config.get("migrations") or {}
-    protected = migrations.get("protected_paths") or []
+    migrations = cfi.section(config, "migrations")
+    protected = cfi.str_list(migrations.get("protected_paths"))
     if not protected:
-        sys.exit(0)
+        cfi.allow()
 
-    rel = os.path.relpath(file_path, cwd) if os.path.isabs(file_path) else file_path
-    rel = rel.replace(os.sep, "/")
+    rel = cfi.relativize(file_path, cwd)
+    if not rel or not cfi.matches_any(rel, protected):
+        cfi.allow()
 
-    for pattern in protected:
-        if fnmatch.fnmatch(rel, pattern) or fnmatch.fnmatch(file_path, pattern):
-            tool = migrations.get("tool", "your migration tool")
-            cmd = migrations.get("command", f"{tool} autogenerate")
-            deny(
-                "BLOCKED by claude-for-idiots Rule 1: migration files are "
-                "generated, never hand-edited. "
-                f"'{rel}' matches a protected migration path.\n"
-                f"Change the models/schema and run: {cmd}\n"
-                "Explain this to the user in their language before retrying."
-            )
-
-    sys.exit(0)
+    tool = migrations.get("tool", "your migration tool")
+    command = migrations.get("command", tool + " autogenerate")
+    cfi.decide("deny", (
+        "BLOCKED by claude-for-idiots Rule 1: migration files are generated, "
+        "never hand-edited.\n"
+        "'" + rel + "' matches a protected migration path.\n"
+        "Change the models/schema and run: " + command + "\n"
+        "Explain this to the user in their language before retrying."
+    ))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Last-resort net, not a substitute for fixing each cause: this
+        # execution alone found three separate ways attacker/tool-influenced
+        # input reached an uncaught exception (RecursionError parsing JSON,
+        # re.error compiling a config glob, TypeError on a non-string
+        # command) -- three instances of the SAME invariant violation this
+        # module exists to prevent. Every known boundary already fails open
+        # on its own; this is the backstop for the next one nobody has found
+        # yet. `except Exception` does not catch the `SystemExit` that
+        # `cfi.allow()`/`cfi.decide()` raise (SystemExit subclasses
+        # BaseException, not Exception), so the normal exit paths are
+        # unaffected -- this only ever fires for a genuinely unanticipated
+        # failure.
+        sys.exit(0)

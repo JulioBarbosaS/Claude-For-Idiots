@@ -1,0 +1,12 @@
+{
+  "slug": "login-google",
+  "recorded_at": "2026-09-25T14:03:00Z",
+  "head": "3db5115",
+  "decisions": [
+    "convive com o login de email/senha",
+    "guarda email, nome e foto"
+  ],
+  "target_paths": ["src/auth/**", "tests/auth/**"],
+  "doc": "docs/features/2026-09-25-login-google.md",
+  "skipped": false
+}

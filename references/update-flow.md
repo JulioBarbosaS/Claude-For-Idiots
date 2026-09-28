@@ -34,6 +34,12 @@ Only if `<cwd>/.claude-for-idiots/config.json` exists; otherwise say so and stop
    - Merge any new hook entries into `.claude/settings.json` (never remove the
      user's own entries).
    - Add new config fields with their defaults (never change existing values).
+   - **Exception — `brainstorm` (0.5.0+).** Do NOT add this section with a
+     default. A missing section reads as `off`, on purpose, so an upgrading
+     project keeps behaving exactly as it did. Rule 10 changes what happens
+     when the user asks for a feature, so it is their call, not a default:
+     ask, as options to pick from, and write only what they choose. If they
+     don't answer, leave the section absent. See `SKILL.md`'s "Updating".
    - Merge new rules/sections into `CLAUDE.md` — **never** overwrite the stack,
      architecture, or verified facts.
    - Create artifacts that didn't exist in the old version (e.g. `docs/INDEX.md`
